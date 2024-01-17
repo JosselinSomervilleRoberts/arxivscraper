@@ -40,3 +40,8 @@ TEX_EQUATION_DELIMITER = [
     ["\\begin{math}", "\\end{math}"],
     ["\\begin{displaymath}", "\\end{displaymath}"],
 ]
+
+
+TEX_BEGIN = r"""\documentclass{article}\usepackage{amsmath,amssymb,amsfonts}\usepackage{graphicx}\usepackage{graphicx}\usepackage{amsmath}\usepackage{xcolor}\usepackage{algorithm}\usepackage{algpseudocode}\usepackage{stfloats}\begin{document}"""
+
+TEX_END = r"""\end{document}"""

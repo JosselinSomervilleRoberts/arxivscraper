@@ -6,9 +6,10 @@ from typing import List, Optional, Tuple
 from tqdm import tqdm
 import shutil
 import json
-import time
+from PIL import Image
 
-from constants import TEX_EQUATION_DELIMITER
+from constants import TEX_EQUATION_DELIMITER, TEX_BEGIN, TEX_END
+from renderer import latex_to_image
 
 
 def gather_papers(
@@ -132,6 +133,43 @@ def get_equations(list_src_code: List[str], infos: dict) -> Tuple[List[str], dic
     return equations, infos
 
 
+def get_images_from_equations(
+    equations: List[str],
+    infos: dict,
+) -> Tuple[List["Image"], dict]:
+    """Given a list of equations, return a list of images.
+
+    Args:
+        equations (List[str]): List of equations.
+        infos (dict): informations on the scrapping process.
+
+    Returns:
+        List[str]: List of images.
+        infos (dict): informations added.
+    """
+    images: List[str] = []
+    num_equations = len(equations)
+
+    with tqdm(total=num_equations, desc="Rendering equations") as pbar:
+        for equation in equations:
+            try:
+                image, dimensions = latex_to_image(
+                    TEX_BEGIN + equation + TEX_END,
+                    assets_path="assets",
+                    crop=True,
+                )
+                if image is not None:
+                    images.append(image)
+            except Exception as e:
+                pass
+            pbar.update(1)
+
+    infos["num_images"] = len(images)
+    infos["num_images_failed"] = num_equations - len(images)
+
+    return images, infos
+
+
 def save_infos(infos: dict):
     """Save the information about the scrapped papers.
 
@@ -229,18 +267,55 @@ def read_equations() -> Tuple[List[str], dict]:
     return equations, infos
 
 
+def save_images(images: List["Image"], infos: Optional[dict] = None):
+    """Save the images.
+
+    Args:
+        images (List[Image]): List of images.
+    """
+    os.makedirs("data", exist_ok=True)
+    os.makedirs("data/images", exist_ok=True)
+    for i, image in enumerate(images):
+        image.save(f"data/images/image_{i}.png")
+    if infos is not None:
+        save_infos(infos)
+
+
+def read_images() -> Tuple[List["Image"], dict]:
+    """Read the images.
+
+    Returns:
+        List[Image]: List of images.
+        dict: Information about the scrapped papers.
+    """
+    images: List["Image"] = []
+    for root, dirs, files in os.walk("data/images"):
+        for file in files:
+            if file.endswith(".png"):
+                image = Image.open(os.path.join(root, file))
+                images.append(image)
+    infos = read_infos()
+    return images, infos
+
+
 if __name__ == "__main__":
     # Check if data/papers exists
-    if os.path.exists("data/equations"):
-        print("Equations already exist.")
-        equations, infos = read_equations()
+    if os.path.exists("data/images"):
+        print("Images already exist.")
+        images, infos = read_images()
     else:
-        if os.path.exists("data/papers"):
-            print("Papers already exist.")
-            papers, infos = read_scrapped_papers()
+        if os.path.exists("data/equations"):
+            print("Equations already exist.")
+            equations, infos = read_equations()
         else:
-            print("Scrapping papers...")
-            papers, infos = gather_papers()
-            save_scrapped_papers(papers, infos)
-        equations, infos = get_equations(papers, infos)
-        save_equations(equations, infos)
+            if os.path.exists("data/papers"):
+                print("Papers already exist.")
+                papers, infos = read_scrapped_papers()
+            else:
+                print("Scrapping papers...")
+                papers, infos = gather_papers()
+                save_scrapped_papers(papers, infos)
+            equations, infos = get_equations(papers, infos)
+            save_equations(equations, infos)
+        images, infos = get_images_from_equations(equations, infos)
+        save_images(images, infos)
