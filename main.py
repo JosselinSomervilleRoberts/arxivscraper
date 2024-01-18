@@ -77,13 +77,20 @@ def gather_papers(
 
                                 # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
                                 for original_name in asset_names:
-                                    if not "." in original_name:
+                                    original_name_with_extension = original_name
+                                    if not "." in original_name_with_extension:
                                         # Find a file starting with the original_name to determine the extension
-                                        file_name = original_name.split("/")[-1]
+                                        file_name = original_name_with_extension.split(
+                                            "/"
+                                        )[-1]
                                         for root, dirs, files in os.walk(
                                             os.path.join(
                                                 TMP_DIR,
-                                                "/".join(original_name.split("/")[:-1]),
+                                                "/".join(
+                                                    original_name_with_extension.split(
+                                                        "/"
+                                                    )[:-1]
+                                                ),
                                             )
                                         ):
                                             for file in files:
@@ -91,16 +98,24 @@ def gather_papers(
                                                     extension = os.path.splitext(file)[
                                                         1
                                                     ]
-                                                    original_name += extension
+                                                    original_name_with_extension += (
+                                                        extension
+                                                    )
                                                     break
                                     new_name = (
                                         str(num_extracted)
                                         + "_"
-                                        + original_name.replace("/", "_")
+                                        + original_name_with_extension.replace("/", "_")
                                     )
-                                    asset_mapping[new_name] = original_name
+                                    asset_mapping[new_name] = [
+                                        original_name,
+                                        original_name_with_extension,
+                                    ]
 
-                                for new_name, original_name in asset_mapping.items():
+                                for new_name, [
+                                    original_name,
+                                    original_name_with_extension,
+                                ] in asset_mapping.items():
                                     tex_code = tex_code.replace(original_name, new_name)
 
                                 papers.append(tex_code)
@@ -111,8 +126,11 @@ def gather_papers(
                 num_read += 1
 
             # Copy the assets
-            for new_name, original_name in asset_mapping.items():
-                asset_path = os.path.join(TMP_DIR, original_name)
+            for new_name, [
+                original_name,
+                original_name_with_extension,
+            ] in asset_mapping.items():
+                asset_path = os.path.join(TMP_DIR, original_name_with_extension)
                 new_asset_path = os.path.join("data/assets", new_name)
                 try:
                     shutil.copy(asset_path, new_asset_path)
@@ -164,37 +182,31 @@ def get_delimited_content(
         Dict[str, List[str]]: Dictionnary mapping a category to the list of delimited instances
         infos (dict): informations added.
     """
-    num_lines_of_code = sum([len(src_code.split("\n")) for src_code in list_src_code])
-    num_delimiters = sum([len(delimiters) for delimiters in TEX_DELIMITERS.values()])
     delimited_content: Dict[str, List[str]] = {}
 
-    with tqdm(
-        total=num_lines_of_code * num_delimiters, desc="Extracting delimited content"
-    ) as pbar:
-        for category, delimiters in TEX_DELIMITERS.items():
-            delimited_content[category] = []
-            for src_code in list_src_code:
-                for delimiter in delimiters:
-                    start, end = delimiter
-                    start_idx, end_idx = 0, 0
-                    while start_idx != -1 and end_idx != -1:
-                        start_idx = src_code.find(start, end_idx)
-                        if start_idx == -1:
-                            break
-                        end_idx = src_code.find(end, start_idx)
-                        if start_idx != -1 and end_idx != -1:
-                            delimited_content[category].append(
-                                src_code[start_idx : end_idx + len(end)]
-                            )
-                    pbar.update(len(src_code))
+    for category, delimiters in TEX_DELIMITERS.items():
+        delimited_content[category] = []
+        for src_code in list_src_code:
+            for delimiter in delimiters:
+                start, end = delimiter
+                start_idx, end_idx = 0, 0
+                while start_idx != -1 and end_idx != -1:
+                    start_idx = src_code.find(start, end_idx)
+                    if start_idx == -1:
+                        break
+                    end_idx = src_code.find(end, start_idx)
+                    if start_idx != -1 and end_idx != -1:
+                        delimited_content[category].append(
+                            src_code[start_idx : end_idx + len(end)]
+                        )
 
-            # Remove duplicates
-            original_num = len(delimited_content[category])
-            delimited_content[category] = list(set(delimited_content[category]))
-            infos[category] = {
-                "number_of_original_samples": original_num,
-                "number_of_unique_samples": len(delimited_content[category]),
-            }
+        # Remove duplicates
+        original_num = len(delimited_content[category])
+        delimited_content[category] = list(set(delimited_content[category]))
+        infos[category] = {
+            "number_of_original_samples": original_num,
+            "number_of_unique_samples": len(delimited_content[category]),
+        }
 
     return delimited_content, infos
 
@@ -368,6 +380,7 @@ if __name__ == "__main__":
         if os.path.exists("data/contents"):
             print("Delimited content already exist.")
             delimited_content, infos = read_delimited_content()
+            delimited_content["equation"] = []
         else:
             if os.path.exists("data/papers"):
                 print("Papers already exist.")
@@ -377,5 +390,6 @@ if __name__ == "__main__":
                 papers, infos = gather_papers()
                 save_scrapped_papers(papers, infos)
             delimited_content, infos = get_delimited_content(papers, infos)
+            delimited_content["equation"] = []
             save_delimited_content(delimited_content, infos)
         get_and_save_rendering_from_delimited_content(delimited_content, infos)

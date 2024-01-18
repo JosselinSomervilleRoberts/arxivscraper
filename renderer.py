@@ -58,5 +58,5 @@ def latex_to_image(
         image = pdf_to_image(pdf_stream, crop=crop, resize_to=resize_to)
         return image, image.size
     except Exception as e:
-        print(f"An error occurred: {e}")
+        # print(f"An error occurred: {e}")
         return None, None

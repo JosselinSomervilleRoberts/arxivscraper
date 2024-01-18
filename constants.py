@@ -122,7 +122,8 @@ TEX_BEGIN = r"""
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{stfloats}
-% \usepackage{pgfplots}
+\usepackage{epstopdf}
+\usepackage{pgfplots}
 \begin{document}"""
 
 TEX_END = r"""\end{document}"""
