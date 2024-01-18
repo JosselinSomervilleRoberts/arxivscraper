@@ -268,12 +268,10 @@ def get_and_save_rendering_from_delimited_content(
         infos (dict): informations on the scrapping process.
     """
 
-    # Create folder to save the images.
-    os.makedirs(f"{data_path}/images", exist_ok=True)
-
     for category, list_of_content in delimited_content.items():
         num_instances = len(list_of_content)
         os.makedirs(f"{data_path}/images/{category}s", exist_ok=True)
+        os.makedirs(f"{data_path}/contents_filtered/{category}s", exist_ok=True)
         num_images = 0
 
         with tqdm(total=num_instances, desc=f"Rendering {category}") as pbar:
@@ -282,13 +280,19 @@ def get_and_save_rendering_from_delimited_content(
                     image, dimensions = latex_to_image(
                         TEX_BEGIN + tex_code + TEX_END,
                         assets_path=f"{data_path}/assets",
-                        crop=True,
+                        crop=False,
                     )
                     if image is not None:
                         # Save the image
                         image.save(
                             f"{data_path}/images/{category}s/{category}_{num_images}.png"
                         )
+                        # Save the associated code
+                        with open(
+                            f"{data_path}/contents_filtered/{category}s/{category}_{num_images}.tex",
+                            "w",
+                        ) as f:
+                            f.write(tex_code)
                         num_images += 1
 
                 except Exception as e:
