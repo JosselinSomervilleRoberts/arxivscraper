@@ -11,6 +11,7 @@ from PIL import Image
 from constants import TEX_DELIMITERS, TEX_BEGIN, TEX_END
 from renderer import latex_to_image
 import os
+import re
 
 
 def gather_papers(
@@ -38,6 +39,9 @@ def gather_papers(
         date_until=date_until,
     )
 
+    os.makedirs("data", exist_ok=True)
+    os.makedirs("data/assets", exist_ok=True)
+
     outputs = scraper.scrape()
     papers: List[str] = []
     num_scrapped, num_downloaded, num_extracted, num_read = len(outputs), 0, 0, 0
@@ -59,6 +63,7 @@ def gather_papers(
                 # Extract all the contents into the current directory
                 tar.extractall(path=TMP_DIR)
             num_extracted += 1
+            asset_mapping = {}
 
             # Search for all '.tex' file in the extracted directory
             has_tex_file = False
@@ -68,12 +73,51 @@ def gather_papers(
                         with open(os.path.join(root, file), "r") as f:
                             try:
                                 tex_code = f.read()
+                                asset_names = get_asset_names_used(tex_code)
+
+                                # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
+                                for original_name in asset_names:
+                                    if not "." in original_name:
+                                        # Find a file starting with the original_name to determine the extension
+                                        file_name = original_name.split("/")[-1]
+                                        for root, dirs, files in os.walk(
+                                            os.path.join(
+                                                TMP_DIR,
+                                                "/".join(original_name.split("/")[:-1]),
+                                            )
+                                        ):
+                                            for file in files:
+                                                if file.startswith(file_name):
+                                                    extension = os.path.splitext(file)[
+                                                        1
+                                                    ]
+                                                    original_name += extension
+                                                    break
+                                    new_name = (
+                                        str(num_extracted)
+                                        + "_"
+                                        + original_name.replace("/", "_")
+                                    )
+                                    asset_mapping[new_name] = original_name
+
+                                for new_name, original_name in asset_mapping.items():
+                                    tex_code = tex_code.replace(original_name, new_name)
+
                                 papers.append(tex_code)
                                 has_tex_file = True
                             except UnicodeDecodeError:
                                 pass
             if has_tex_file:
                 num_read += 1
+
+            # Copy the assets
+            for new_name, original_name in asset_mapping.items():
+                asset_path = os.path.join(TMP_DIR, original_name)
+                new_asset_path = os.path.join("data/assets", new_name)
+                try:
+                    shutil.copy(asset_path, new_asset_path)
+                except FileNotFoundError:
+                    pass
 
             # Remove the temporary directory (and its contents)
             shutil.rmtree(TMP_DIR)
@@ -91,6 +135,19 @@ def gather_papers(
         "num_files": len(papers),
     }
     return papers, infos
+
+
+def get_asset_names_used(latex_code: str) -> List[str]:
+    content, _ = get_delimited_content([latex_code], {})
+    list_figures = content["figure"]
+    pattern = r"\\includegraphics(?:\[[^\]]+\])?\{([^}]+)\}"
+
+    asset_names = []
+    for figure in list_figures:
+        matches = re.findall(pattern, figure)
+        asset_names.extend(matches)
+
+    return asset_names
 
 
 def get_delimited_content(
@@ -168,7 +225,7 @@ def get_and_save_rendering_from_delimited_content(
                 try:
                     image, dimensions = latex_to_image(
                         TEX_BEGIN + tex_code + TEX_END,
-                        assets_path="assets",
+                        assets_path="data/assets",
                         crop=True,
                     )
                     if image is not None:
