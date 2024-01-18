@@ -210,20 +210,6 @@ def get_delimited_content(
     delimited_content: Dict[str, List[str]] = {}
 
     for category, (must_contain, delimiters) in TEX_DELIMITERS.items():
-        # delimited_content[category] = []
-        # for src_code in list_src_code:
-        #     for delimiter in delimiters:
-        #         start, end = delimiter
-        #         start_idx, end_idx = 0, 0
-        #         while start_idx != -1 and end_idx != -1:
-        #             start_idx = src_code.find(start, end_idx)
-        #             if start_idx == -1:
-        #                 break
-        #             end_idx = src_code.find(end, start_idx)
-        #             if start_idx != -1 and end_idx != -1:
-        #                 delimited_content[category].append(
-        #                     src_code[start_idx : end_idx + len(end)]
-        #                 )
         delimited_content[category] = []
         for delimiter in delimiters:
             start, end = delimiter
