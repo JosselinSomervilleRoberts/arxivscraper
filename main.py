@@ -77,66 +77,71 @@ def gather_papers(
                 for root, dirs, files in os.walk(TMP_DIR):
                     for file in files:
                         if file.endswith(".tex"):
-                            with open(os.path.join(root, file), "r") as f:
-                                try:
-                                    tex_code = f.read()
-                                    asset_names = get_asset_names_used(tex_code)
+                            try:
+                                with open(os.path.join(root, file), "r") as f:
+                                    try:
+                                        tex_code = f.read()
+                                        asset_names = get_asset_names_used(tex_code)
 
-                                    # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
-                                    for original_name in asset_names:
-                                        original_name_with_extension = original_name
-                                        if not "." in original_name_with_extension:
-                                            # Find a file starting with the original_name to determine the extension
-                                            file_name = (
-                                                original_name_with_extension.split("/")[
-                                                    -1
-                                                ]
-                                            )
-                                            for root, dirs, files in os.walk(
-                                                os.path.join(
-                                                    TMP_DIR,
-                                                    "/".join(
-                                                        original_name_with_extension.split(
-                                                            "/"
-                                                        )[
-                                                            :-1
-                                                        ]
-                                                    ),
+                                        # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
+                                        for original_name in asset_names:
+                                            original_name_with_extension = original_name
+                                            if not "." in original_name_with_extension:
+                                                # Find a file starting with the original_name to determine the extension
+                                                file_name = (
+                                                    original_name_with_extension.split(
+                                                        "/"
+                                                    )[-1]
                                                 )
-                                            ):
-                                                for file in files:
-                                                    if file.startswith(file_name):
-                                                        extension = os.path.splitext(
-                                                            file
-                                                        )[1]
-                                                        original_name_with_extension += (
-                                                            extension
-                                                        )
-                                                        break
-                                        new_name = (
-                                            str(num_extracted)
-                                            + "_"
-                                            + original_name_with_extension.replace(
-                                                "/", "_"
+                                                for root, dirs, files in os.walk(
+                                                    os.path.join(
+                                                        TMP_DIR,
+                                                        "/".join(
+                                                            original_name_with_extension.split(
+                                                                "/"
+                                                            )[
+                                                                :-1
+                                                            ]
+                                                        ),
+                                                    )
+                                                ):
+                                                    for file in files:
+                                                        if file.startswith(file_name):
+                                                            extension = (
+                                                                os.path.splitext(file)[
+                                                                    1
+                                                                ]
+                                                            )
+                                                            original_name_with_extension += (
+                                                                extension
+                                                            )
+                                                            break
+                                            new_name = (
+                                                str(num_extracted)
+                                                + "_"
+                                                + original_name_with_extension.replace(
+                                                    "/", "_"
+                                                )
                                             )
-                                        )
-                                        asset_mapping[new_name] = [
+                                            asset_mapping[new_name] = [
+                                                original_name,
+                                                original_name_with_extension,
+                                            ]
+
+                                        for new_name, [
                                             original_name,
                                             original_name_with_extension,
-                                        ]
+                                        ] in asset_mapping.items():
+                                            tex_code = tex_code.replace(
+                                                original_name, new_name
+                                            )
 
-                                    for new_name, [
-                                        original_name,
-                                        original_name_with_extension,
-                                    ] in asset_mapping.items():
-                                        tex_code = tex_code.replace(
-                                            original_name, new_name
-                                        )
-
-                                    papers.append(tex_code)
-                                    has_tex_file = True
-                                except UnicodeDecodeError:
-                                    pass
+                                        papers.append(tex_code)
+                                        has_tex_file = True
+                                    except UnicodeDecodeError:
+                                        pass
+                            except FileNotFoundError:
+                                pass
 
                 # Copy the assets
                 for new_name, [
@@ -204,21 +209,56 @@ def get_delimited_content(
     """
     delimited_content: Dict[str, List[str]] = {}
 
-    for category, delimiters in TEX_DELIMITERS.items():
+    for category, (must_contain, delimiters) in TEX_DELIMITERS.items():
+        # delimited_content[category] = []
+        # for src_code in list_src_code:
+        #     for delimiter in delimiters:
+        #         start, end = delimiter
+        #         start_idx, end_idx = 0, 0
+        #         while start_idx != -1 and end_idx != -1:
+        #             start_idx = src_code.find(start, end_idx)
+        #             if start_idx == -1:
+        #                 break
+        #             end_idx = src_code.find(end, start_idx)
+        #             if start_idx != -1 and end_idx != -1:
+        #                 delimited_content[category].append(
+        #                     src_code[start_idx : end_idx + len(end)]
+        #                 )
         delimited_content[category] = []
-        for src_code in list_src_code:
-            for delimiter in delimiters:
-                start, end = delimiter
-                start_idx, end_idx = 0, 0
-                while start_idx != -1 and end_idx != -1:
-                    start_idx = src_code.find(start, end_idx)
-                    if start_idx == -1:
-                        break
-                    end_idx = src_code.find(end, start_idx)
-                    if start_idx != -1 and end_idx != -1:
-                        delimited_content[category].append(
-                            src_code[start_idx : end_idx + len(end)]
-                        )
+        for delimiter in delimiters:
+            start, end = delimiter
+            for src_code in list_src_code:
+                lines = src_code.split("\n")  # Split the source code into lines
+                start_idx, end_idx = None, None
+                content = ""
+
+                for line in lines:
+                    stripped_line = line.strip()
+
+                    # Skip commented lines
+                    if stripped_line.startswith("%"):
+                        continue
+
+                    # Check for the start delimiter
+                    if start_idx is None:
+                        if start in stripped_line:
+                            start_idx = lines.index(line)
+                            content += line + "\n"
+                            continue
+
+                    # If we are in an environment, add the line to content
+                    if start_idx is not None:
+                        content += line + "\n"
+
+                    # Check for the end delimiter
+                    if end in stripped_line:
+                        end_idx = lines.index(line)
+                        if start_idx is not None and end_idx is not None:
+                            # We only add the content to the category if it contains the must_contain string
+                            if must_contain is None or must_contain in content:
+                                delimited_content[category].append(content)
+                            start_idx, end_idx = None, None
+                            content = ""
 
         # Remove duplicates
         original_num = len(delimited_content[category])
@@ -395,7 +435,7 @@ def read_delimited_content(
 
 
 if __name__ == "__main__":
-    categories = ["cs", "econ", "eess", "math", "physics", "q-bio", "q-fin", "stat"]
+    categories = ["econ", "eess", "math", "physics", "q-bio", "q-fin", "stat", "cs"]
     date_from: str = "2024-01-01"
     date_until: str = "2024-01-02"
     num_papers_per_category = 200
