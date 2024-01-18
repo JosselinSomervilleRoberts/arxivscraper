@@ -15,6 +15,27 @@ import re
 import random
 from PIL import Image
 import numpy as np
+import signal
+
+
+# Define the function to handle the timeout
+def handler(signum, frame):
+    raise Exception("Download timed out")
+
+
+# Function to download the file with exception handling and timeout
+def download_file(download_url, filename, timeout_seconds=30):
+    try:
+        # Set the timeout signal
+        signal.signal(signal.SIGALRM, handler)
+        signal.alarm(timeout_seconds)
+
+        # Attempt to download the file
+        urlretrieve(download_url, filename)
+        signal.alarm(0)  # Reset the alarm
+        return True
+    except Exception as e:
+        return False
 
 
 def gather_papers(
@@ -61,116 +82,124 @@ def gather_papers(
             download_url = "https://arxiv.org/e-print/" + doi
 
             # Download the .tar.gz file
-            urlretrieve(download_url, filename=TMP_FILE)
-            num_downloaded += 1
+            successful = download_file(download_url, filename=TMP_FILE)
+            if successful:
+                num_downloaded += 1
 
-            # Extract the .tar.gz file in a temporary directory
-            # Creates the dir (ok if it already exists)
-            os.makedirs(TMP_DIR, exist_ok=True)
-            try:
-                with tarfile.open(TMP_FILE, "r:gz") as tar:
-                    # Extract all the contents into the current directory
-                    tar.extractall(path=TMP_DIR)
-                num_extracted += 1
-                asset_mapping = {}
+                # Extract the .tar.gz file in a temporary directory
+                # Creates the dir (ok if it already exists)
+                os.makedirs(TMP_DIR, exist_ok=True)
+                try:
+                    with tarfile.open(TMP_FILE, "r:gz") as tar:
+                        # Extract all the contents into the current directory
+                        tar.extractall(path=TMP_DIR)
+                    num_extracted += 1
+                    asset_mapping = {}
 
-                # Search for all '.tex' file in the extracted directory
-                has_tex_file = False
-                for root, dirs, files in os.walk(TMP_DIR):
-                    for file in files:
-                        if file.endswith(".tex"):
-                            try:
-                                with open(os.path.join(root, file), "r") as f:
-                                    try:
-                                        tex_code = f.read()
-                                        asset_names = get_asset_names_used(tex_code)
+                    # Search for all '.tex' file in the extracted directory
+                    has_tex_file = False
+                    for root, dirs, files in os.walk(TMP_DIR):
+                        for file in files:
+                            if file.endswith(".tex"):
+                                try:
+                                    with open(os.path.join(root, file), "r") as f:
+                                        try:
+                                            tex_code = f.read()
+                                            asset_names = get_asset_names_used(tex_code)
 
-                                        # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
-                                        for original_name in asset_names:
-                                            original_name_with_extension = original_name
-                                            if not "." in original_name_with_extension:
-                                                # Find a file starting with the original_name to determine the extension
-                                                file_name = (
-                                                    original_name_with_extension.split(
-                                                        "/"
-                                                    )[-1]
+                                            # Rename the assets by replacing / by _ and adding num_extracted _ at the beginning
+                                            for original_name in asset_names:
+                                                original_name_with_extension = (
+                                                    original_name
                                                 )
-                                                for root, dirs, files in os.walk(
-                                                    os.path.join(
-                                                        TMP_DIR,
-                                                        "/".join(
-                                                            original_name_with_extension.split(
-                                                                "/"
-                                                            )[
-                                                                :-1
-                                                            ]
-                                                        ),
-                                                    )
+                                                if (
+                                                    not "."
+                                                    in original_name_with_extension
                                                 ):
-                                                    for file in files:
-                                                        if file.startswith(file_name):
-                                                            extension = (
-                                                                os.path.splitext(file)[
-                                                                    1
+                                                    # Find a file starting with the original_name to determine the extension
+                                                    file_name = original_name_with_extension.split(
+                                                        "/"
+                                                    )[
+                                                        -1
+                                                    ]
+                                                    for root, dirs, files in os.walk(
+                                                        os.path.join(
+                                                            TMP_DIR,
+                                                            "/".join(
+                                                                original_name_with_extension.split(
+                                                                    "/"
+                                                                )[
+                                                                    :-1
                                                                 ]
-                                                            )
-                                                            original_name_with_extension += (
-                                                                extension
-                                                            )
-                                                            break
-                                            new_name = (
-                                                str(num_extracted)
-                                                + "_"
-                                                + original_name_with_extension.replace(
-                                                    "/", "_"
+                                                            ),
+                                                        )
+                                                    ):
+                                                        for file in files:
+                                                            if file.startswith(
+                                                                file_name
+                                                            ):
+                                                                extension = (
+                                                                    os.path.splitext(
+                                                                        file
+                                                                    )[1]
+                                                                )
+                                                                original_name_with_extension += (
+                                                                    extension
+                                                                )
+                                                                break
+                                                new_name = (
+                                                    str(num_extracted)
+                                                    + "_"
+                                                    + original_name_with_extension.replace(
+                                                        "/", "_"
+                                                    )
                                                 )
-                                            )
-                                            asset_mapping[new_name] = [
+                                                asset_mapping[new_name] = [
+                                                    original_name,
+                                                    original_name_with_extension,
+                                                ]
+
+                                            for new_name, [
                                                 original_name,
                                                 original_name_with_extension,
-                                            ]
+                                            ] in asset_mapping.items():
+                                                tex_code = tex_code.replace(
+                                                    original_name, new_name
+                                                )
 
-                                        for new_name, [
-                                            original_name,
-                                            original_name_with_extension,
-                                        ] in asset_mapping.items():
-                                            tex_code = tex_code.replace(
-                                                original_name, new_name
-                                            )
+                                            papers.append(tex_code)
+                                            has_tex_file = True
+                                        except UnicodeDecodeError:
+                                            pass
+                                except FileNotFoundError:
+                                    pass
 
-                                        papers.append(tex_code)
-                                        has_tex_file = True
-                                    except UnicodeDecodeError:
-                                        pass
-                            except FileNotFoundError:
-                                pass
+                    # Copy the assets
+                    for new_name, [
+                        original_name,
+                        original_name_with_extension,
+                    ] in asset_mapping.items():
+                        asset_path = os.path.join(TMP_DIR, original_name_with_extension)
+                        new_asset_path = os.path.join(f"{data_path}/assets", new_name)
+                        try:
+                            shutil.copy(asset_path, new_asset_path)
+                        except FileNotFoundError:
+                            pass
 
-                # Copy the assets
-                for new_name, [
-                    original_name,
-                    original_name_with_extension,
-                ] in asset_mapping.items():
-                    asset_path = os.path.join(TMP_DIR, original_name_with_extension)
-                    new_asset_path = os.path.join(f"{data_path}/assets", new_name)
-                    try:
-                        shutil.copy(asset_path, new_asset_path)
-                    except FileNotFoundError:
-                        pass
+                    # Remove the temporary directory (and its contents)
+                    shutil.rmtree(TMP_DIR)
 
-                # Remove the temporary directory (and its contents)
-                shutil.rmtree(TMP_DIR)
+                    # Update progress bar and break once we have enough papers
+                    if has_tex_file:
+                        num_read += 1
+                        pbar.update(1)
+                        if num_read >= num_papers:
+                            break
+                except tarfile.ReadError:
+                    pass
 
-                # Update progress bar and break once we have enough papers
-                if has_tex_file:
-                    num_read += 1
-                    pbar.update(1)
-                    if num_read >= num_papers:
-                        break
-            except tarfile.ReadError:
-                pass
-
-            # Remove the .tar.gz file
-            os.remove(TMP_FILE)
+                # Remove the .tar.gz file
+                os.remove(TMP_FILE)
 
     infos = {
         "num_scrapped": num_scrapped,
