@@ -2,14 +2,15 @@ import arxivscraper
 from urllib.request import urlretrieve
 import tarfile
 import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from tqdm import tqdm
 import shutil
 import json
 from PIL import Image
 
-from constants import TEX_EQUATION_DELIMITER, TEX_BEGIN, TEX_END
+from constants import TEX_DELIMITERS, TEX_BEGIN, TEX_END
 from renderer import latex_to_image
+import os
 
 
 def gather_papers(
@@ -92,82 +93,99 @@ def gather_papers(
     return papers, infos
 
 
-def get_equations(list_src_code: List[str], infos: dict) -> Tuple[List[str], dict]:
-    """Given a tex source code, return a list of equations.
+def get_delimited_content(
+    list_src_code: List[str], infos: dict
+) -> Tuple[Dict[str, List[str]], dict]:
+    """Given a tex source code, return a dictionarry mapping categories (equation, plot, table, ...) to
+    all the instances of that category in the source codes.
 
     Args:
         list_src_code (List[str]): List of tex source codes.
         infos (dict): informations on the scrapping process.
 
     Returns:
-        List[str]: List of equations.
+        Dict[str, List[str]]: Dictionnary mapping a category to the list of delimited instances
         infos (dict): informations added.
     """
     num_lines_of_code = sum([len(src_code.split("\n")) for src_code in list_src_code])
-    num_delimiters = len(TEX_EQUATION_DELIMITER)
-    equations: List[str] = []
+    num_delimiters = sum([len(delimiters) for delimiters in TEX_DELIMITERS.values()])
+    delimited_content: Dict[str, List[str]] = {}
 
     with tqdm(
-        total=num_lines_of_code * num_delimiters, desc="Extracting equations"
+        total=num_lines_of_code * num_delimiters, desc="Extracting delimited content"
     ) as pbar:
-        for src_code in list_src_code:
-            for delimiter in TEX_EQUATION_DELIMITER:
-                start, end = delimiter
-                start_idx, end_idx, last_end_idx = 0, 0, 0
-                while start_idx != -1 and end_idx != -1:
-                    start_idx = src_code.find(start, end_idx)
-                    if start_idx == -1:
-                        break
-                    end_idx = src_code.find(end, start_idx)
-                    if start_idx != -1 and end_idx != -1:
-                        equations.append(src_code[start_idx : end_idx + len(end)])
-                        pbar.update(end_idx - last_end_idx)
-                        last_end_idx = end_idx
-                pbar.update(len(src_code) - last_end_idx)
+        for category, delimiters in TEX_DELIMITERS.items():
+            delimited_content[category] = []
+            for src_code in list_src_code:
+                for delimiter in delimiters:
+                    start, end = delimiter
+                    start_idx, end_idx = 0, 0
+                    while start_idx != -1 and end_idx != -1:
+                        start_idx = src_code.find(start, end_idx)
+                        if start_idx == -1:
+                            break
+                        end_idx = src_code.find(end, start_idx)
+                        if start_idx != -1 and end_idx != -1:
+                            delimited_content[category].append(
+                                src_code[start_idx : end_idx + len(end)]
+                            )
+                    pbar.update(len(src_code))
 
-    num_eq = len(equations)
-    equations = list(set(equations))
-    infos["num_equations"] = len(equations)
-    infos["num_equations_duplicated"] = num_eq - len(equations)
+            # Remove duplicates
+            original_num = len(delimited_content[category])
+            delimited_content[category] = list(set(delimited_content[category]))
+            infos[category] = {
+                "number_of_original_samples": original_num,
+                "number_of_unique_samples": len(delimited_content[category]),
+            }
 
-    return equations, infos
+    return delimited_content, infos
 
 
-def get_images_from_equations(
-    equations: List[str],
+def get_and_save_rendering_from_delimited_content(
+    delimited_content: Dict[str, List[str]],
     infos: dict,
-) -> Tuple[List["Image"], dict]:
-    """Given a list of equations, return a list of images.
+):
+    """Given a dictionnary of delimited content, render all the images.
+    Save them directly.
 
     Args:
-        equations (List[str]): List of equations.
+        delimited_content (Dict[str, List[str]]): Dictionnary mapping a category to the list of delimited instances
         infos (dict): informations on the scrapping process.
-
-    Returns:
-        List[str]: List of images.
-        infos (dict): informations added.
     """
-    images: List[str] = []
-    num_equations = len(equations)
 
-    with tqdm(total=num_equations, desc="Rendering equations") as pbar:
-        for equation in equations:
-            try:
-                image, dimensions = latex_to_image(
-                    TEX_BEGIN + equation + TEX_END,
-                    assets_path="assets",
-                    crop=True,
-                )
-                if image is not None:
-                    images.append(image)
-            except Exception as e:
-                pass
-            pbar.update(1)
+    # Create folder to save the images.
+    os.makedirs("data", exist_ok=True)
+    os.makedirs("data/images", exist_ok=True)
 
-    infos["num_images"] = len(images)
-    infos["num_images_failed"] = num_equations - len(images)
+    for category, list_of_content in delimited_content.items():
+        num_instances = len(list_of_content)
+        os.makedirs(f"data/images/{category}s", exist_ok=True)
+        num_images = 0
 
-    return images, infos
+        with tqdm(total=num_instances, desc=f"Rendering {category}") as pbar:
+            for tex_code in list_of_content:
+                try:
+                    image, dimensions = latex_to_image(
+                        TEX_BEGIN + tex_code + TEX_END,
+                        assets_path="assets",
+                        crop=True,
+                    )
+                    if image is not None:
+                        # Save the image
+                        image.save(
+                            f"data/images/{category}s/{category}_{num_images}.png"
+                        )
+                        num_images += 1
+
+                except Exception as e:
+                    pass
+                pbar.update(1)
+
+        infos[category]["number_of_images"] = num_images
+        infos[category]["number_of_images_not_rendered"] = num_instances - num_images
+
+    save_infos(infos)
 
 
 def save_infos(infos: dict):
@@ -178,7 +196,7 @@ def save_infos(infos: dict):
     """
     os.makedirs("data", exist_ok=True)
     with open("data/infos.json", "w") as f:
-        json.dump(infos, f)
+        json.dump(infos, f, indent=4)
 
 
 def read_infos() -> dict:
@@ -231,82 +249,68 @@ def read_scrapped_papers() -> Tuple[List[str], dict]:
     return papers, infos
 
 
-def save_equations(equations: List[str], infos: Optional[dict] = None):
+def save_delimited_content(
+    delimited_content: Dict[str, List[str]], infos: Optional[dict] = None
+):
     """Save the equations.
 
     Args:
-        equations (List[str]): List of equations.
+        delimited_content (Dict[str, List[str]]): Dictionnary mapping a category to the list of delimited instances
     """
     os.makedirs("data", exist_ok=True)
-    os.makedirs("data/equations", exist_ok=True)
-    for i, equation in enumerate(equations):
-        with open(f"data/equations/equation_{i}.tex", "w") as f:
-            f.write(equation)
+    os.makedirs("data/contents", exist_ok=True)
+
+    for category, content in delimited_content.items():
+        os.makedirs(f"data/contents/{category}s", exist_ok=True)
+        for i, tex_code in enumerate(content):
+            with open(f"data/contents/{category}s/{category}_{i}.tex", "w") as f:
+                f.write(tex_code)
     if infos is not None:
         save_infos(infos)
 
 
-def read_equations() -> Tuple[List[str], dict]:
+def read_delimited_content() -> Tuple[Dict[str, List[str]], dict]:
     """Read the equations.
 
     Returns:
-        List[str]: List of equations.
+        Dict[str, List[str]]: Dictionnary mapping a category to the list of delimited instances
         dict: Information about the scrapped papers.
     """
-    equations: List[str] = []
-    for root, dirs, files in os.walk("data/equations"):
-        for file in files:
-            if file.endswith(".tex"):
-                with open(os.path.join(root, file), "r") as f:
-                    try:
-                        tex_code = f.read()
-                        equations.append(tex_code)
-                    except UnicodeDecodeError:
-                        pass
+    delimited_content: Dict[str, List[str]] = {}
+
+    data_folder = "data/contents"
+    excluded_folders = ["papers", "images"]
+
+    for root, dirs, _ in os.walk(data_folder):
+        dirs[:] = [d for d in dirs if d not in excluded_folders]
+        for folder in dirs:
+            folder_path = os.path.join(root, folder)
+            category = folder_path.split("/")[-1][:-1]
+            print(f"Reading category {category} from path: {folder_path}")
+            delimited_content[category] = []
+
+            for _, _, files in os.walk(folder_path):
+                for file in files:
+                    if file.endswith(".tex"):
+                        with open(os.path.join(folder_path, file), "r") as f:
+                            try:
+                                tex_code = f.read()
+                                delimited_content[category].append(tex_code)
+                            except UnicodeDecodeError:
+                                pass
+
     infos = read_infos()
-    return equations, infos
-
-
-def save_images(images: List["Image"], infos: Optional[dict] = None):
-    """Save the images.
-
-    Args:
-        images (List[Image]): List of images.
-    """
-    os.makedirs("data", exist_ok=True)
-    os.makedirs("data/images", exist_ok=True)
-    for i, image in enumerate(images):
-        image.save(f"data/images/image_{i}.png")
-    if infos is not None:
-        save_infos(infos)
-
-
-def read_images() -> Tuple[List["Image"], dict]:
-    """Read the images.
-
-    Returns:
-        List[Image]: List of images.
-        dict: Information about the scrapped papers.
-    """
-    images: List["Image"] = []
-    for root, dirs, files in os.walk("data/images"):
-        for file in files:
-            if file.endswith(".png"):
-                image = Image.open(os.path.join(root, file))
-                images.append(image)
-    infos = read_infos()
-    return images, infos
+    return delimited_content, infos
 
 
 if __name__ == "__main__":
     # Check if data/papers exists
     if os.path.exists("data/images"):
         print("Images already exist.")
-        images, infos = read_images()
     else:
-        if os.path.exists("data/equations"):
-            print("Equations already exist.")
-            equations, infos = read_equations()
+        if os.path.exists("data/contents"):
+            print("Delimited content already exist.")
+            delimited_content, infos = read_delimited_content()
         else:
             if os.path.exists("data/papers"):
                 print("Papers already exist.")
@@ -315,7 +319,6 @@ if __name__ == "__main__":
                 print("Scrapping papers...")
                 papers, infos = gather_papers()
                 save_scrapped_papers(papers, infos)
-            equations, infos = get_equations(papers, infos)
-            save_equations(equations, infos)
-        images, infos = get_images_from_equations(equations, infos)
-        save_images(images, infos)
+            delimited_content, infos = get_delimited_content(papers, infos)
+            save_delimited_content(delimited_content, infos)
+        get_and_save_rendering_from_delimited_content(delimited_content, infos)
