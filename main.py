@@ -13,6 +13,8 @@ from renderer import latex_to_image
 import os
 import re
 import random
+from PIL import Image
+import numpy as np
 
 
 def gather_papers(
@@ -280,9 +282,10 @@ def get_and_save_rendering_from_delimited_content(
                     image, dimensions = latex_to_image(
                         TEX_BEGIN + tex_code + TEX_END,
                         assets_path=f"{data_path}/assets",
-                        crop=False,
+                        crop=True,
                     )
-                    if image is not None:
+                    # Check if the image is not fully white
+                    if image is not None and not np.allclose(image, 255):
                         # Save the image
                         image.save(
                             f"{data_path}/images/{category}s/{category}_{num_images}.png"
