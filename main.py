@@ -1,5 +1,6 @@
 from utils import MultiProgressBar, download_file, read_latex_file
 import arxivscraper
+from arxivscraper.constants import cats as ARXIV_CATEGORIES
 import tarfile
 import os
 from typing import List, Optional, Tuple, Dict
@@ -384,11 +385,11 @@ if __name__ == "__main__":
     categories = ["econ", "eess", "math", "physics", "q-bio", "q-fin", "stat", "cs"]
     date_until: str = "2024-01-18"
     num_instances_per_tex_category = {
-        "equation": 200,
-        "figure": 200,
-        "table": 200,
-        "algorithm": 50,
-        "plot": 50,
+        "equation": 125,
+        "figure": 125,
+        "table": 125,
+        "algorithm": 125,
+        "plot": 125,
     }
 
     for category in categories:
