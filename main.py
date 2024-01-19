@@ -370,7 +370,7 @@ def get_and_save_rendering_from_delimited_content(
     return num_done
 
 
-def get_day_before(date_str: str, days: int = 1) -> s
+def get_day_before(date_str: str, days: int = 1) -> str:
     # Convert string to datetime object
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
 
