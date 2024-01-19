@@ -17,6 +17,7 @@ import re
 import random
 import numpy as np
 from datetime import datetime, timedelta
+import argparse
 
 
 def gather_papers(
@@ -369,7 +370,7 @@ def get_and_save_rendering_from_delimited_content(
     return num_done
 
 
-def get_day_before(date_str: str, days: int = 1) -> str:
+def get_day_before(date_str: str, days: int = 1) -> s
     # Convert string to datetime object
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
 
@@ -382,22 +383,27 @@ def get_day_before(date_str: str, days: int = 1) -> str:
 
 
 if __name__ == "__main__":
-    categories = ["econ", "eess", "math", "physics", "q-bio", "q-fin", "stat", "cs"]
+    parser = argparse.ArgumentParser(description="Arxiv Scraper")
+    parser.add_argument("--category", type=str, help="Category to scrape")
+    args = parser.parse_args()
+
+    category = args.category
+
+    # Rest of the code
     date_until: str = "2024-01-15"
     num_instances_per_tex_category = {
-        "equation": 125,
+        "equation": 250,
         "figure": 125,
         "table": 125,
         "algorithm": 125,
         "plot": 125,
     }
 
-    for category in categories:
-        gather_papers(
-            category=category,
-            date_from=get_day_before(date_until, days=14),
-            date_until=date_until,
-            num_to_do=num_instances_per_tex_category,
-            dest_path=f"data/{category}",
-            max_elt_per_category=3,
-        )
+    gather_papers(
+        category=category,
+        date_from=get_day_before(date_until, days=14),
+        date_until=date_until,
+        num_to_do=num_instances_per_tex_category,
+        dest_path=f"data/{category}",
+        max_elt_per_category=3,
+    )
