@@ -383,7 +383,7 @@ def get_day_before(date_str: str, days: int = 1) -> str:
 
 if __name__ == "__main__":
     categories = ["econ", "eess", "math", "physics", "q-bio", "q-fin", "stat", "cs"]
-    date_until: str = "2024-01-18"
+    date_until: str = "2024-01-15"
     num_instances_per_tex_category = {
         "equation": 125,
         "figure": 125,
