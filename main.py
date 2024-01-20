@@ -219,14 +219,8 @@ def rename_and_save_assets(
 
 
 def get_asset_names_used(latex_code: str) -> List[str]:
-    list_figures = get_delimited_content(latex_code, categories=["figure"])["figure"]
     pattern = r"\\includegraphics(?:\[[^\]]+\])?\{([^}]+)\}"
-
-    asset_names = []
-    for figure in list_figures:
-        matches = re.findall(pattern, figure)
-        asset_names.extend(matches)
-
+    asset_names = re.findall(pattern, latex_code)
     return asset_names
 
 

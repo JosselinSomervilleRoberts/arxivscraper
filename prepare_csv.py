@@ -33,7 +33,11 @@ def create_csv_file():
                         if (
                             len(assets) <= NUM_ASSETS
                             and len(tex_code) <= 10000
-                            and (len(assets) == 0 or category == "figure")
+                            and (
+                                len(assets) == 0
+                                or category == "figure"
+                                or category == "plot"
+                            )
                         ):
                             row = (
                                 [id_counter, tex_code_path, category, subject]
@@ -43,7 +47,11 @@ def create_csv_file():
                             )
                             writer.writerow(row)
                             id_counter += 1
-                        elif len(assets) > 0 and category != "figure":
+                        elif (
+                            len(assets) > 0
+                            and category != "figure"
+                            and category != "plot"
+                        ):
                             print(
                                 f"Skipping entry {id_counter} due to assets in non-figure category."
                             )
