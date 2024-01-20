@@ -2,30 +2,21 @@ import csv
 import os
 from main import get_asset_names_used
 
-SUBJECTS = ["cs", "q-bio", "q-fin", "stat"]
-COLUMNS = [
-    "id",
-    "tex_code",
-    "category",
-    "subject",
-    "asset_1",
-    "asset_2",
-    "asset_3",
-    "asset_4",
-    "asset_5",
-    "asset_6",
-    "output",
+SUBJECTS = ["cs", "q-bio", "q-fin", "stat", "eess", "econ", "math", "physics"]
+CATEGORIES = ["equation", "figure", "table", "plot", "algorithm"]
+NUM_ASSETS = 10
+COLUMNS = ["id", "tex_code", "category", "subject", "output"] + [
+    f"asset_{i}" for i in range(NUM_ASSETS)
 ]
 
 
 def create_csv_file():
-    with open("dataset.csv", "w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(COLUMNS)
-        id_counter = 1
-        for subject in SUBJECTS:
-            for category in os.listdir(f"data/{subject}/contents"):
-                category = category[:-1]  # Removing s
+    for category in CATEGORIES:
+        with open(f"dataset_{category}.csv", "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(COLUMNS)
+            id_counter = 1
+            for subject in SUBJECTS:
                 print(f"Category {category}")
                 for i in range(
                     0, len(os.listdir(f"data/{subject}/contents/{category}s"))
@@ -39,18 +30,30 @@ def create_csv_file():
                         assets = get_asset_names_used(tex_code)
                         for i in range(len(assets)):
                             assets[i] = f"assets/{subject}/{assets[i]}"
-                        if len(assets) <= 6:
+                        if (
+                            len(assets) <= NUM_ASSETS
+                            and len(tex_code) <= 10000
+                            and (len(assets) == 0 or category == "figure")
+                        ):
                             row = (
                                 [id_counter, tex_code_path, category, subject]
-                                + assets
-                                + ["" for i in range(6 - len(assets))]
                                 + [image_path]
+                                + assets
+                                + ["" for i in range(NUM_ASSETS - len(assets))]
                             )
                             writer.writerow(row)
                             id_counter += 1
+                        elif len(assets) > 0 and category != "figure":
+                            print(
+                                f"Skipping entry {id_counter} due to assets in non-figure category."
+                            )
+                        elif len(tex_code) > 10000:
+                            print(
+                                f"Skipping entry {id_counter} due to tex_code length > 10000."
+                            )
                         else:
                             print(
-                                f"Skipping entry {id_counter} due to more than 6 assets."
+                                f"Skipping entry {id_counter} due to more than {NUM_ASSETS} assets."
                             )
                     else:
                         print(
